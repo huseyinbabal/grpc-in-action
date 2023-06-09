@@ -1,4 +1,4 @@
-module github.com/huseyinbabal/grpc-in-action
+module github.com/huseyinbabal/grpc-ping-pong
 
 go 1.17
 

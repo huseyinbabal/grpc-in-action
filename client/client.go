@@ -3,51 +3,60 @@ package main
 import (
 	"context"
 	"flag"
-	"github.com/huseyinbabal/grpc-in-action/repository"
+	"github.com/huseyinbabal/grpc-ping-pong/pingpong"
 	"google.golang.org/grpc"
 	"io"
 	"log"
+	"math/rand"
 	"time"
 )
 
-var serverAddr = flag.String("server_addr","localhost:10000", "gRPC server address")
+var (
+	serverAddr = flag.String("server_addr", "localhost:10000", "gRPC server address")
+	messages   = []string{
+		"Hello!",
+		"Welcome!",
+		"Goodbye!",
+		"Greetings!",
+		"Have a nice day!",
+	}
+)
+
 func main() {
 	flag.Parse()
 
 	var opts []grpc.DialOption
-	opts = append(opts,grpc.WithInsecure())
-	opts=append(opts,grpc.WithBlock())
+	opts = append(opts, grpc.WithInsecure())
+	opts = append(opts, grpc.WithBlock())
 	conn, err := grpc.Dial(*serverAddr, opts...)
-	if err!=nil{
-		log.Fatalf("failed to dial %v",err)
+	if err != nil {
+		log.Fatalf("failed to dial %v", err)
 	}
 
 	defer conn.Close()
 
-	client := repository.NewRepositoryClient(conn)
+	client := pingpong.NewPingPongServiceClient(conn)
 
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
 	defer cancel()
 
-	stream, streamErr := client.Search(ctx)
+	stream, streamErr := client.Ping(ctx)
 
 	if streamErr != nil {
 		log.Fatalf("Failed to stream: %v", streamErr)
 	}
 
-	keywords := []string{"raft", "spring"}
 	done := make(chan bool)
 	streamContext := stream.Context()
 	go func() {
-		for _, keyword := range keywords {
-			req := repository.SearchCodeRequest{User: "huseyinbabal", Keyword: keyword}
+
+		for {
+			msg := generateRandomMessage()
+			req := pingpong.PingRequest{Message: msg}
 			if err := stream.Send(&req); err != nil {
-				log.Fatalf("Cannot sned %v", req)
+				log.Fatalf("Cannot send %v", req)
 			}
 			time.Sleep(time.Second * 2)
-		}
-		if err := stream.CloseSend(); err != nil {
-			log.Fatalf("Couldn't close send: %v", err)
 		}
 	}()
 
@@ -61,7 +70,7 @@ func main() {
 			if respErr != nil {
 				log.Fatalf("Couldn't receive %v", respErr)
 			}
-			log.Println(response.Name)
+			log.Println(response.Message)
 		}
 	}()
 
@@ -74,4 +83,9 @@ func main() {
 	}()
 	<-done
 	log.Println("Streaming finished")
+}
+
+func generateRandomMessage() string {
+	index := rand.Intn(len(messages)) // Generate random index
+	return messages[index]            // Return random message
 }
